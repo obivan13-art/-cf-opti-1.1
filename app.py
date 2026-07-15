@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import math
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
@@ -94,40 +94,10 @@ def optimalizalt_vagas(tabla: Tabla, darab_hossz: int, darab_szelesseg: int, vag
         vagasok_szama=max_darab - 1 if max_darab > 0 else 0
     )
 
-def xps_toldas_optimalizalt(darab: KeszDarab, tabla: Tabla, vagasveszteseg: int) -> Tuple[int, int, List[VagasiEredmeny]]:
-    szukseges_tabla_db = 0
-    ossz_hulladek = 0
-    vagasi_terv = []
-    
-    maradek_hossz = darab.hossz
-    
-    while maradek_hossz > 0:
-        aktualis_hossz = min(maradek_hossz, tabla.hossz)
-        
-        eredmeny = optimalizalt_vagas(
-            tabla,
-            darab_hossz=aktualis_hossz,
-            darab_szelesseg=darab.szelesseg,
-            vagasveszteseg=vagasveszteseg
-        )
-        
-        szukseges_tabla_db += 1
-        
-        if eredmeny.darabok_szama > 0:
-            maradek_hossz -= eredmeny.felhasznalt_hossz
-            ossz_hulladek += eredmeny.hulladek_hossz
-            vagasi_terv.append(eredmeny)
-        else:
-            maradek_hossz -= aktualis_hossz
-            ossz_hulladek += aktualis_hossz
-        
-        if 0 < maradek_hossz < 200:
-            ossz_hulladek += maradek_hossz
-            maradek_hossz = 0
-    
-    return szukseges_tabla_db, ossz_hulladek, vagasi_terv
-
 def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> Dict[str, Dict[int, SzuksegletEredmeny]]:
+    """Kiszamolja a szukseges tablakat anyagonkent es vastagsagonkent."""
+    
+    # Csoportositas anyag es vastagsag szerint
     csoportok = defaultdict(lambda: defaultdict(list))
     for d in darabok:
         csoportok[d.anyag][d.vastagsag].append(d)
@@ -147,6 +117,12 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             
             legjobb_tabla = max(elerheto_tablak, key=lambda t: t.hossz)
             
+            # *** ITT A JAVÍTÁS - ÖSSZEVONJUK A DARABOKAT ***
+            # Egyesítjük az azonos méretű darabokat
+            meret_csoportok = defaultdict(int)
+            for d in darab_lista:
+                meret_csoportok[(d.szelesseg, d.hossz)] += d.darabszam
+            
             szukseges_tablak = []
             ossz_tabla_db = 0
             ossz_felhasznalt = 0
@@ -154,47 +130,41 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             ossz_hulladek = 0
             vagasi_terv = []
             
-            for darab in darab_lista:
-                if anyag == "XPS" and darab.hossz > legjobb_tabla.hossz:
-                    for _ in range(darab.darabszam):
-                        db, hulladek, terv = xps_toldas_optimalizalt(
-                            darab, legjobb_tabla, vagasveszteseg
-                        )
-                        szukseges_tablak.extend([legjobb_tabla] * db)
-                        ossz_tabla_db += db
-                        ossz_felhasznalt += darab.hossz
-                        ossz_hossz += db * legjobb_tabla.hossz
-                        ossz_hulladek += hulladek
-                        vagasi_terv.extend(terv)
-                else:
-                    eredmeny = optimalizalt_vagas(
-                        legjobb_tabla,
-                        darab.hossz,
-                        darab.szelesseg,
-                        vagasveszteseg
-                    )
-                    
-                    if eredmeny.darabok_szama > 0:
-                        szukseges_tabla_db = math.ceil(
-                            darab.darabszam / eredmeny.darabok_szama
-                        )
-                        szukseges_tablak.extend([legjobb_tabla] * szukseges_tabla_db)
-                        ossz_tabla_db += szukseges_tabla_db
-                        ossz_felhasznalt += eredmeny.felhasznalt_hossz * szukseges_tabla_db
-                        ossz_hossz += legjobb_tabla.hossz * szukseges_tabla_db
-                        ossz_hulladek += eredmeny.hulladek_hossz * szukseges_tabla_db
-                        vagasi_terv.append(eredmeny)
+            # Minden méretcsoportra külön számolunk
+            for (szelesseg, hossz), darabszam in meret_csoportok.items():
+                # Kiszámoljuk, hány darab fér egy táblára
+                eredmeny = optimalizalt_vagas(
+                    legjobb_tabla,
+                    hossz,
+                    szelesseg,
+                    vagasveszteseg
+                )
+                
+                if eredmeny.darabok_szama > 0:
+                    # Hány tábla kell ehhez a mérethez
+                    szukseges_tabla_db = math.ceil(darabszam / eredmeny.darabok_szama)
+                    szukseges_tablak.extend([legjobb_tabla] * szukseges_tabla_db)
+                    ossz_tabla_db += szukseges_tabla_db
+                    ossz_felhasznalt += eredmeny.felhasznalt_hossz * szukseges_tabla_db
+                    ossz_hossz += legjobb_tabla.hossz * szukseges_tabla_db
+                    ossz_hulladek += eredmeny.hulladek_hossz * szukseges_tabla_db
+                    vagasi_terv.append(eredmeny)
             
             if ossz_hossz > 0:
                 hulladek_szazalek = (ossz_hulladek / ossz_hossz) * 100
             else:
                 hulladek_szazalek = 0
             
+            # Eredeti darabok listája (kiíráshoz)
+            eredeti_darabok = []
+            for d in darab_lista:
+                eredeti_darabok.append(d)
+            
             eredmenyek[anyag][vastagsag] = SzuksegletEredmeny(
                 anyag=anyag,
                 vastagsag=vastagsag,
                 szukseges_tablak=szukseges_tablak,
-                darabok=darab_lista,
+                darabok=eredeti_darabok,
                 ossz_tabla_db=ossz_tabla_db,
                 ossz_felhasznalt=ossz_felhasznalt,
                 ossz_hossz=ossz_hossz,
@@ -207,28 +177,28 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
 # ==================== WEBES FELÜLET ====================
 
 st.set_page_config(
-    page_title="Szabász Kalkulátor",
-    page_icon="???",
+    page_title="Szabasz Kalkulator",
+    page_icon="🏗️",
     layout="wide"
 )
 
-st.title("??? Szabász Kalkulátor")
-st.markdown("### Többféle tábla anyagszükséglet számítása")
+st.title("🏗️ Szabasz Kalkulator")
+st.markdown("### Tobbfele tabla anyagszukseglet szamitasa")
 
-# ---------- BEÁLLÍTÁSOK ----------
+# ---------- BEALLITASOK ----------
 with st.sidebar:
-    st.header("?? Beállítások")
+    st.header("⚙️ Beallitasok")
     
     vagasveszteseg = st.slider(
-        "?? Vágásveszteség (mm)",
+        "🔪 Vagasveszteseg (mm)",
         min_value=1,
         max_value=10,
         value=5,
-        help="A fűrészlap vastagsága"
+        help="A fureszlap vastagsaga"
     )
     
     st.markdown("---")
-    st.header("?? Elérhető táblák")
+    st.header("📦 Elerheto tablak")
     
     st.markdown("**Compacfoam:**")
     st.code("40x1200x2400\n50x1200x2400\n60x1200x2400\n70x1200x2400\n80x1200x2400")
@@ -236,27 +206,20 @@ with st.sidebar:
     st.markdown("**XPS:**")
     st.code("20x600x1250\n30x600x1250\n40x600x1250\n50x600x1250\n60x600x1250\n80x600x1250")
 
-# ---------- DARABOK KEZELÉSE ----------
-st.header("?? Darabok")
+# ---------- DARABOK KEZELESE ----------
+st.header("📋 Darabok")
 
-# Munkamenetben tároljuk a darabokat
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
-        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 100, "hossz": 2400, "darabszam": 5},
-        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 200, "hossz": 1800, "darabszam": 3},
-        {"anyag": "Compacfoam", "vastagsag": 50, "szelesseg": 150, "hossz": 2400, "darabszam": 8},
-        {"anyag": "Compacfoam", "vastagsag": 60, "szelesseg": 120, "hossz": 1200, "darabszam": 10},
-        {"anyag": "XPS", "vastagsag": 50, "szelesseg": 200, "hossz": 2400, "darabszam": 2},
-        {"anyag": "XPS", "vastagsag": 50, "szelesseg": 600, "hossz": 1000, "darabszam": 12},
-        {"anyag": "XPS", "vastagsag": 40, "szelesseg": 500, "hossz": 1250, "darabszam": 8},
-        {"anyag": "XPS", "vastagsag": 30, "szelesseg": 400, "hossz": 800, "darabszam": 15},
+        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 2},
+        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 1},
     ]
 
-# Darabok listázása
+# Darabok listazasa
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("?? Jelenlegi darabok")
+    st.subheader("📄 Jelenlegi darabok")
     
     if st.session_state.darabok:
         data = []
@@ -264,26 +227,26 @@ with col1:
             data.append({
                 "ID": i,
                 "Anyag": d["anyag"],
-                "Vastagság": d["vastagsag"],
-                "Szélesség": d["szelesseg"],
+                "Vastagsag": d["vastagsag"],
+                "Szelesseg": d["szelesseg"],
                 "Hossz": d["hossz"],
-                "Darabszám": d["darabszam"]
+                "Darabszam": d["darabszam"]
             })
         st.dataframe(data, use_container_width=True)
     else:
-        st.info("Nincs egyetlen darab sem! Adj hozzá az alábbi űrlapon.")
+        st.info("Nincs egyetlen darab sem! Adj hozza az alabbi urlapon.")
 
 with col2:
-    st.subheader("? Új darab hozzáadása")
+    st.subheader("➕ Uj darab hozzaadasa")
     
     with st.form("add_piece"):
         anyag = st.selectbox("Anyag", ["Compacfoam", "XPS"])
-        vastagsag = st.number_input("Vastagság (mm)", min_value=10, max_value=100, value=40)
-        szelesseg = st.number_input("Szélesség (mm)", min_value=10, max_value=1000, value=120)
+        vastagsag = st.number_input("Vastagsag (mm)", min_value=10, max_value=100, value=40)
+        szelesseg = st.number_input("Szelesseg (mm)", min_value=10, max_value=1000, value=120)
         hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2400)
-        darabszam = st.number_input("Darabszám", min_value=1, max_value=1000, value=10)
+        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=10)
         
-        submitted = st.form_submit_button("? Hozzáad")
+        submitted = st.form_submit_button("➕ Hozzaad")
         if submitted:
             st.session_state.darabok.append({
                 "anyag": anyag,
@@ -294,30 +257,30 @@ with col2:
             })
             st.rerun()
 
-# Darab törlése
+# Darab torlese
 if st.session_state.darabok:
-    st.subheader("??? Darab törlése")
+    st.subheader("🗑️ Darab torlese")
     torlendo = st.selectbox(
-        "Válaszd ki a törlendő darabot",
+        "Valaszd ki a torlendo darabot",
         options=range(len(st.session_state.darabok)),
         format_func=lambda i: f"{st.session_state.darabok[i]['anyag']} {st.session_state.darabok[i]['vastagsag']}mm - {st.session_state.darabok[i]['darabszam']} db"
     )
-    if st.button("??? Törlés"):
+    if st.button("🗑️ Torles"):
         del st.session_state.darabok[torlendo]
         st.rerun()
 
-# ---------- SZÁMÍTÁS ----------
+# ---------- SZAMITAS ----------
 st.markdown("---")
 
 col1, col2, col3 = st.columns([1, 1, 1])
 with col2:
-    if st.button("?? SZÁMÍTÁS", type="primary", use_container_width=True):
+    if st.button("🧮 SZAMITAS", type="primary", use_container_width=True):
         st.session_state.szamitva = True
 
-# ---------- EREDMÉNYEK ----------
+# ---------- EREDMENYEK ----------
 if st.session_state.get("szamitva", False):
     st.markdown("---")
-    st.header("?? EREDMÉNYEK")
+    st.header("📊 EREDMENYEK")
     
     darabok_lista = []
     for d in st.session_state.darabok:
@@ -333,7 +296,7 @@ if st.session_state.get("szamitva", False):
         eredmenyek = anyagszukseglet_szamitas(darabok_lista, vagasveszteseg)
         
         for anyag, vastag_eredmenyek in eredmenyek.items():
-            st.subheader(f"?? {anyag.upper()}")
+            st.subheader(f"📦 {anyag.upper()}")
             
             cols = st.columns(len(vastag_eredmenyek))
             for idx, (vastagsag, eredmeny) in enumerate(sorted(vastag_eredmenyek.items())):
@@ -341,19 +304,19 @@ if st.session_state.get("szamitva", False):
                     st.metric(
                         label=f"{vastagsag} mm",
                         value=f"{eredmeny.ossz_tabla_db} db",
-                        delta=f"Hulladék: {eredmeny.hulladek_szazalek:.1f}%"
+                        delta=f"Hulladek: {eredmeny.hulladek_szazalek:.1f}%"
                     )
                     
-                    with st.expander("?? Részletek"):
-                        st.write(f"**Felhasznált hossz:** {eredmeny.ossz_felhasznalt} mm")
-                        st.write(f"**Teljes tábla hossz:** {eredmeny.ossz_hossz} mm")
+                    with st.expander("📋 Reszletek"):
+                        st.write(f"**Felhasznalt hossz:** {eredmeny.ossz_felhasznalt} mm")
+                        st.write(f"**Teljes tabla hossz:** {eredmeny.ossz_hossz} mm")
                         if eredmeny.darabok:
                             st.write("**Darabok:**")
                             for d in eredmeny.darabok:
                                 st.write(f"- {d.darabszam} db {d.szelesseg}x{d.hossz} mm")
         
         st.markdown("---")
-        st.subheader("?? TELJES ÖSSZESÍTÉS")
+        st.subheader("📊 TELJES OSSZESITES")
         
         ossz_tabla = 0
         for anyag, vastag_eredmenyek in eredmenyek.items():
@@ -361,10 +324,10 @@ if st.session_state.get("szamitva", False):
             ossz_tabla += anyag_db
             st.metric(f"{anyag.upper()}", f"{anyag_db} db")
         
-        st.metric("??? MINDÖSSZESEN", f"{ossz_tabla} db", delta="Táblák száma")
+        st.metric("🏗️ MINDOSSZESEN", f"{ossz_tabla} db", delta="Tablak szama")
         
     except Exception as e:
-        st.error(f"? Hiba a számítás során: {e}")
+        st.error(f"❌ Hiba a szamitas soran: {e}")
 
 st.markdown("---")
-st.caption("??? Szabász Kalkulátor - Többféle tábla anyagszükséglet számítása")
+st.caption("🏗️ Szabasz Kalkulator - Tobbfele tabla anyagszukseglet szamitasa")

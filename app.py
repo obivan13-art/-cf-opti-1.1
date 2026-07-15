@@ -22,28 +22,25 @@ class KeszDarab:
     darabszam: int
 
 @dataclass
-class VagasiEredmeny:
+class VagasiTerv:
     tabla: Tabla
     darabok: List[Tuple[int, int, int]]
-    felhasznalt_hossz: int
-    hulladek_hossz: int
+    felhasznalt_terulet: int
+    hulladek_terulet: int
     hulladek_szazalek: float
-    darabok_szama: int
-    vagasok_szama: int
 
 @dataclass
 class SzuksegletEredmeny:
     anyag: str
     vastagsag: int
-    szukseges_tablak: List[Tabla]
-    darabok: List[KeszDarab]
     ossz_tabla_db: int
+    tablak: List[VagasiTerv]
+    darabok: List[KeszDarab]
     ossz_felhasznalt: int
-    ossz_hossz: int
+    ossz_terulet: int
     hulladek_szazalek: float
-    vagasi_terv: List[VagasiEredmeny]
 
-# ==================== TÁBLA ADATBÁZIS ====================
+# ==================== TABLA ADATBAZIS ====================
 
 def tablak_eloallitasa() -> List[Tabla]:
     tablak = []
@@ -66,38 +63,47 @@ def tablak_eloallitasa() -> List[Tabla]:
     
     return tablak
 
-# ==================== VÁGÁSI ALGORITMUS ====================
+# ==================== VAGASI ALGORITMUS ====================
 
-def optimalizalt_vagas(tabla: Tabla, darab_hossz: int, darab_szelesseg: int, vagasveszteseg: int) -> VagasiEredmeny:
-    if darab_szelesseg > tabla.szelesseg:
-        return VagasiEredmeny(tabla, [], 0, tabla.hossz, 100.0, 0, 0)
+def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasveszteseg: int) -> VagasiTerv:
+    """Egy tablabol vagja ki a darabokat szelesseg es hossz alapjan."""
     
-    if darab_hossz + vagasveszteseg <= 0:
-        return VagasiEredmeny(tabla, [], 0, tabla.hossz, 100.0, 0, 0)
+    felhasznalt_terulet = 0
+    kivagott_darabok = []
     
-    max_darab = (tabla.hossz + vagasveszteseg) // (darab_hossz + vagasveszteseg)
+    for szelesseg, hossz, darabszam in darabok:
+        if szelesseg > tabla.szelesseg:
+            continue
+        
+        # Hany darab fer egymas melle a szelessegben
+        db_szelessegben = tabla.szelesseg // szelesseg
+        
+        # Hany darab fer a hosszban (vagasveszteseget figyelembe veve)
+        db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+        
+        # Osszes darab egy tablabol
+        db_egy_tablabol = db_szelessegben * db_hosszban
+        
+        if db_egy_tablabol > 0 and darabszam > 0:
+            tenyleges_db = min(db_egy_tablabol, darabszam)
+            kivagott_darabok.append((szelesseg, hossz, tenyleges_db))
+            felhasznalt_terulet += tenyleges_db * szelesseg * hossz
     
-    if max_darab == 0:
-        return VagasiEredmeny(tabla, [], 0, tabla.hossz, 100.0, 0, 0)
+    teljes_terulet = tabla.szelesseg * tabla.hossz
+    hulladek_terulet = teljes_terulet - felhasznalt_terulet
+    hulladek_szazalek = (hulladek_terulet / teljes_terulet) * 100.0 if teljes_terulet > 0 else 100.0
     
-    felhasznalt = max_darab * darab_hossz + (max_darab - 1) * vagasveszteseg
-    hulladek = tabla.hossz - felhasznalt
-    hulladek_szazalek = (hulladek / tabla.hossz) * 100.0
-    
-    return VagasiEredmeny(
+    return VagasiTerv(
         tabla=tabla,
-        darabok=[(darab_hossz, darab_szelesseg, max_darab)],
-        felhasznalt_hossz=felhasznalt,
-        hulladek_hossz=hulladek,
-        hulladek_szazalek=hulladek_szazalek,
-        darabok_szama=max_darab,
-        vagasok_szama=max_darab - 1 if max_darab > 0 else 0
+        darabok=kivagott_darabok,
+        felhasznalt_terulet=felhasznalt_terulet,
+        hulladek_terulet=hulladek_terulet,
+        hulladek_szazalek=hulladek_szazalek
     )
 
 def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> Dict[str, Dict[int, SzuksegletEredmeny]]:
     """Kiszamolja a szukseges tablakat anyagonkent es vastagsagonkent."""
     
-    # Csoportositas anyag es vastagsag szerint
     csoportok = defaultdict(lambda: defaultdict(list))
     for d in darabok:
         csoportok[d.anyag][d.vastagsag].append(d)
@@ -117,70 +123,59 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             
             legjobb_tabla = max(elerheto_tablak, key=lambda t: t.hossz)
             
-            # *** ITT A JAVÍTÁS - ÖSSZEVONJUK A DARABOKAT ***
-            # Egyesítjük az azonos méretű darabokat
+            # Darabok osszegyujtese meretenkent
             meret_csoportok = defaultdict(int)
             for d in darab_lista:
                 meret_csoportok[(d.szelesseg, d.hossz)] += d.darabszam
             
-            szukseges_tablak = []
             ossz_tabla_db = 0
             ossz_felhasznalt = 0
-            ossz_hossz = 0
-            ossz_hulladek = 0
-            vagasi_terv = []
+            ossz_terulet = 0
+            tablak = []
             
-            # Minden méretcsoportra külön számolunk
             for (szelesseg, hossz), darabszam in meret_csoportok.items():
-                # Kiszámoljuk, hány darab fér egy táblára
-                eredmeny = optimalizalt_vagas(
-                    legjobb_tabla,
-                    hossz,
-                    szelesseg,
-                    vagasveszteseg
-                )
+                # Hany darab fer egy tablara
+                db_szelessegben = legjobb_tabla.szelesseg // szelesseg
+                db_hosszban = (legjobb_tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+                db_egy_tablabol = db_szelessegben * db_hosszban
                 
-                if eredmeny.darabok_szama > 0:
-                    # Hány tábla kell ehhez a mérethez
-                    szukseges_tabla_db = math.ceil(darabszam / eredmeny.darabok_szama)
-                    szukseges_tablak.extend([legjobb_tabla] * szukseges_tabla_db)
+                if db_egy_tablabol > 0:
+                    szukseges_tabla_db = math.ceil(darabszam / db_egy_tablabol)
+                    
+                    maradek = darabszam
+                    for _ in range(szukseges_tabla_db):
+                        akt_db = min(maradek, db_egy_tablabol)
+                        maradek -= akt_db
+                        
+                        terv = optimalizalt_vagas(
+                            legjobb_tabla,
+                            [(szelesseg, hossz, akt_db)],
+                            vagasveszteseg
+                        )
+                        tablak.append(terv)
+                        ossz_felhasznalt += terv.felhasznalt_terulet
+                        ossz_terulet += legjobb_tabla.szelesseg * legjobb_tabla.hossz
+                    
                     ossz_tabla_db += szukseges_tabla_db
-                    ossz_felhasznalt += eredmeny.felhasznalt_hossz * szukseges_tabla_db
-                    ossz_hossz += legjobb_tabla.hossz * szukseges_tabla_db
-                    ossz_hulladek += eredmeny.hulladek_hossz * szukseges_tabla_db
-                    vagasi_terv.append(eredmeny)
             
-            if ossz_hossz > 0:
-                hulladek_szazalek = (ossz_hulladek / ossz_hossz) * 100
-            else:
-                hulladek_szazalek = 0
-            
-            # Eredeti darabok listája (kiíráshoz)
-            eredeti_darabok = []
-            for d in darab_lista:
-                eredeti_darabok.append(d)
+            hulladek_szazalek = ((ossz_terulet - ossz_felhasznalt) / ossz_terulet * 100) if ossz_terulet > 0 else 0
             
             eredmenyek[anyag][vastagsag] = SzuksegletEredmeny(
                 anyag=anyag,
                 vastagsag=vastagsag,
-                szukseges_tablak=szukseges_tablak,
-                darabok=eredeti_darabok,
                 ossz_tabla_db=ossz_tabla_db,
+                tablak=tablak,
+                darabok=darab_lista,
                 ossz_felhasznalt=ossz_felhasznalt,
-                ossz_hossz=ossz_hossz,
-                hulladek_szazalek=hulladek_szazalek,
-                vagasi_terv=vagasi_terv
+                ossz_terulet=ossz_terulet,
+                hulladek_szazalek=hulladek_szazalek
             )
     
     return eredmenyek
 
-# ==================== WEBES FELÜLET ====================
+# ==================== WEBES FELULET ====================
 
-st.set_page_config(
-    page_title="Szabasz Kalkulator",
-    page_icon="🏗️",
-    layout="wide"
-)
+st.set_page_config(page_title="Szabasz Kalkulator", page_icon="🏗️", layout="wide")
 
 st.title("🏗️ Szabasz Kalkulator")
 st.markdown("### Tobbfele tabla anyagszukseglet szamitasa")
@@ -211,11 +206,10 @@ st.header("📋 Darabok")
 
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
-        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 2},
+        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2350, "darabszam": 2},
         {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 1},
     ]
 
-# Darabok listazasa
 col1, col2 = st.columns([2, 1])
 
 with col1:
@@ -243,8 +237,8 @@ with col2:
         anyag = st.selectbox("Anyag", ["Compacfoam", "XPS"])
         vastagsag = st.number_input("Vastagsag (mm)", min_value=10, max_value=100, value=40)
         szelesseg = st.number_input("Szelesseg (mm)", min_value=10, max_value=1000, value=120)
-        hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2400)
-        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=10)
+        hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2350)
+        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=2)
         
         submitted = st.form_submit_button("➕ Hozzaad")
         if submitted:
@@ -257,7 +251,6 @@ with col2:
             })
             st.rerun()
 
-# Darab torlese
 if st.session_state.darabok:
     st.subheader("🗑️ Darab torlese")
     torlendo = st.selectbox(
@@ -298,22 +291,24 @@ if st.session_state.get("szamitva", False):
         for anyag, vastag_eredmenyek in eredmenyek.items():
             st.subheader(f"📦 {anyag.upper()}")
             
-            cols = st.columns(len(vastag_eredmenyek))
-            for idx, (vastagsag, eredmeny) in enumerate(sorted(vastag_eredmenyek.items())):
-                with cols[idx % len(cols)]:
+            for vastagsag, eredmeny in sorted(vastag_eredmenyek.items()):
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
                     st.metric(
                         label=f"{vastagsag} mm",
-                        value=f"{eredmeny.ossz_tabla_db} db",
+                        value=f"{eredmeny.ossz_tabla_db} db tabla",
                         delta=f"Hulladek: {eredmeny.hulladek_szazalek:.1f}%"
                     )
-                    
-                    with st.expander("📋 Reszletek"):
-                        st.write(f"**Felhasznalt hossz:** {eredmeny.ossz_felhasznalt} mm")
-                        st.write(f"**Teljes tabla hossz:** {eredmeny.ossz_hossz} mm")
-                        if eredmeny.darabok:
-                            st.write("**Darabok:**")
-                            for d in eredmeny.darabok:
-                                st.write(f"- {d.darabszam} db {d.szelesseg}x{d.hossz} mm")
+                
+                with col2:
+                    if eredmeny.tablak:
+                        with st.expander("📋 Reszletes vagasi terv"):
+                            for i, terv in enumerate(eredmeny.tablak, 1):
+                                st.write(f"**{i}. tabla:** {terv.tabla.szelesseg}x{terv.tabla.hossz}")
+                                for szel, hossz, db in terv.darabok:
+                                    st.write(f"   - {db} db {szel}x{hossz}")
+                                st.write(f"   Hulladek: {terv.hulladek_szazalek:.1f}%")
         
         st.markdown("---")
         st.subheader("📊 TELJES OSSZESITES")

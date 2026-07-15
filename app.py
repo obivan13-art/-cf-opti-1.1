@@ -66,20 +66,31 @@ def tablak_eloallitasa() -> List[Tabla]:
 # ==================== VAGASI ALGORITMUS ====================
 
 def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasveszteseg: int) -> VagasiTerv:
-    """Egy tablabol vagja ki a darabokat szelesseg es hossz alapjan."""
+    """
+    Egy tablabol vagja ki a darabokat.
+    FIGYELEMBE VESZI A VAGASVESZTESEGET!
+    """
     
     felhasznalt_terulet = 0
     kivagott_darabok = []
+    maradek_szelesseg = tabla.szelesseg
+    maradek_hossz = tabla.hossz
     
     for szelesseg, hossz, darabszam in darabok:
-        if szelesseg > tabla.szelesseg:
+        if szelesseg > tabla.szelesseg or hossz > tabla.hossz:
             continue
         
-        # Hany darab fer egymas melle a szelessegben
-        db_szelessegben = tabla.szelesseg // szelesseg
+        # Hany darab fer egymas melle a szelessegben (vagasveszteseget figyelembe veve)
+        if szelesseg + vagasveszteseg > tabla.szelesseg:
+            db_szelessegben = 1
+        else:
+            db_szelessegben = (tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
         
         # Hany darab fer a hosszban (vagasveszteseget figyelembe veve)
-        db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+        if hossz + vagasveszteseg > tabla.hossz:
+            db_hosszban = 1
+        else:
+            db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
         
         # Osszes darab egy tablabol
         db_egy_tablabol = db_szelessegben * db_hosszban
@@ -113,6 +124,7 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
     
     for anyag, vastag_csoport in csoportok.items():
         for vastagsag, darab_lista in vastag_csoport.items():
+            # Kivalasztjuk a megfelelo tablat
             elerheto_tablak = [
                 t for t in osszes_tabla
                 if t.anyag == anyag and t.vastagsag == vastagsag
@@ -134,8 +146,8 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             tablak = []
             
             for (szelesseg, hossz), darabszam in meret_csoportok.items():
-                # Hany darab fer egy tablara
-                db_szelessegben = legjobb_tabla.szelesseg // szelesseg
+                # Hany darab fer egy tablara (VAGASVESZTESEGGEL)
+                db_szelessegben = (legjobb_tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
                 db_hosszban = (legjobb_tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
                 db_egy_tablabol = db_szelessegben * db_hosszban
                 
@@ -206,7 +218,7 @@ st.header("📋 Darabok")
 
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
-        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2350, "darabszam": 2},
+        {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 10},
         {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 1},
     ]
 
@@ -228,17 +240,17 @@ with col1:
             })
         st.dataframe(data, use_container_width=True)
     else:
-        st.info("Nincs egyetlen darab sem! Adj hozza az alabbi urlapon.")
+        st.info("Nincs egyetlen darab sem!")
 
 with col2:
-    st.subheader("➕ Uj darab hozzaadasa")
+    st.subheader("➕ Uj darab")
     
     with st.form("add_piece"):
         anyag = st.selectbox("Anyag", ["Compacfoam", "XPS"])
         vastagsag = st.number_input("Vastagsag (mm)", min_value=10, max_value=100, value=40)
         szelesseg = st.number_input("Szelesseg (mm)", min_value=10, max_value=1000, value=120)
-        hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2350)
-        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=2)
+        hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2400)
+        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=10)
         
         submitted = st.form_submit_button("➕ Hozzaad")
         if submitted:
@@ -252,7 +264,7 @@ with col2:
             st.rerun()
 
 if st.session_state.darabok:
-    st.subheader("🗑️ Darab torlese")
+    st.subheader("🗑️ Torles")
     torlendo = st.selectbox(
         "Valaszd ki a torlendo darabot",
         options=range(len(st.session_state.darabok)),
@@ -265,10 +277,8 @@ if st.session_state.darabok:
 # ---------- SZAMITAS ----------
 st.markdown("---")
 
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
-    if st.button("🧮 SZAMITAS", type="primary", use_container_width=True):
-        st.session_state.szamitva = True
+if st.button("🧮 SZAMITAS", type="primary", use_container_width=True):
+    st.session_state.szamitva = True
 
 # ---------- EREDMENYEK ----------
 if st.session_state.get("szamitva", False):
@@ -288,41 +298,47 @@ if st.session_state.get("szamitva", False):
     try:
         eredmenyek = anyagszukseglet_szamitas(darabok_lista, vagasveszteseg)
         
-        for anyag, vastag_eredmenyek in eredmenyek.items():
-            st.subheader(f"📦 {anyag.upper()}")
+        if not eredmenyek:
+            st.warning("Nincs eredmeny! Ellenorizd a darabok adatait.")
+        else:
+            for anyag, vastag_eredmenyek in eredmenyek.items():
+                st.subheader(f"📦 {anyag.upper()}")
+                
+                for vastagsag, eredmeny in sorted(vastag_eredmenyek.items()):
+                    col1, col2 = st.columns([1, 1])
+                    
+                    with col1:
+                        st.metric(
+                            label=f"{vastagsag} mm",
+                            value=f"{eredmeny.ossz_tabla_db} db tabla",
+                            delta=f"Hulladek: {eredmeny.hulladek_szazalek:.1f}%"
+                        )
+                    
+                    with col2:
+                        if eredmeny.tablak:
+                            with st.expander("📋 Reszletes vagasi terv"):
+                                for i, terv in enumerate(eredmeny.tablak, 1):
+                                    st.write(f"**{i}. tabla:** {terv.tabla.szelesseg}x{terv.tabla.hossz}")
+                                    if terv.darabok:
+                                        for szel, hossz, db in terv.darabok:
+                                            st.write(f"   - {db} db {szel}x{hossz}")
+                                    else:
+                                        st.write("   - Nincs kivagott darab")
+                                    st.write(f"   Hulladek: {terv.hulladek_szazalek:.1f}%")
             
-            for vastagsag, eredmeny in sorted(vastag_eredmenyek.items()):
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    st.metric(
-                        label=f"{vastagsag} mm",
-                        value=f"{eredmeny.ossz_tabla_db} db tabla",
-                        delta=f"Hulladek: {eredmeny.hulladek_szazalek:.1f}%"
-                    )
-                
-                with col2:
-                    if eredmeny.tablak:
-                        with st.expander("📋 Reszletes vagasi terv"):
-                            for i, terv in enumerate(eredmeny.tablak, 1):
-                                st.write(f"**{i}. tabla:** {terv.tabla.szelesseg}x{terv.tabla.hossz}")
-                                for szel, hossz, db in terv.darabok:
-                                    st.write(f"   - {db} db {szel}x{hossz}")
-                                st.write(f"   Hulladek: {terv.hulladek_szazalek:.1f}%")
-        
-        st.markdown("---")
-        st.subheader("📊 TELJES OSSZESITES")
-        
-        ossz_tabla = 0
-        for anyag, vastag_eredmenyek in eredmenyek.items():
-            anyag_db = sum(e.ossz_tabla_db for e in vastag_eredmenyek.values())
-            ossz_tabla += anyag_db
-            st.metric(f"{anyag.upper()}", f"{anyag_db} db")
-        
-        st.metric("🏗️ MINDOSSZESEN", f"{ossz_tabla} db", delta="Tablak szama")
+            st.markdown("---")
+            st.subheader("📊 TELJES OSSZESITES")
+            
+            ossz_tabla = 0
+            for anyag, vastag_eredmenyek in eredmenyek.items():
+                anyag_db = sum(e.ossz_tabla_db for e in vastag_eredmenyek.values())
+                ossz_tabla += anyag_db
+                st.metric(f"{anyag.upper()}", f"{anyag_db} db")
+            
+            st.metric("🏗️ MINDOSSZESEN", f"{ossz_tabla} db", delta="Tablak szama")
         
     except Exception as e:
         st.error(f"❌ Hiba a szamitas soran: {e}")
 
 st.markdown("---")
-st.caption("🏗️ Szabasz Kalkulator - Tobbfele tabla anyagszukseglet szamitasa")
+st.caption("🏗️ Szabasz Kalkulator")

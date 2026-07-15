@@ -1,10 +1,10 @@
-import streamlit as st
+Ôªøimport streamlit as st
 import math
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from collections import defaultdict
 
-# ==================== ADATSTRUKT⁄R¡K ====================
+# ==================== ADATSTRUKT√öR√ÅK ====================
 
 @dataclass
 class Tabla:
@@ -43,7 +43,7 @@ class SzuksegletEredmeny:
     hulladek_szazalek: float
     vagasi_terv: List[VagasiEredmeny]
 
-# ==================== T¡BLA ADATB¡ZIS ====================
+# ==================== T√ÅBLA ADATB√ÅZIS ====================
 
 def tablak_eloallitasa() -> List[Tabla]:
     tablak = []
@@ -66,7 +66,7 @@ def tablak_eloallitasa() -> List[Tabla]:
     
     return tablak
 
-# ==================== V¡G¡SI ALGORITMUS ====================
+# ==================== V√ÅG√ÅSI ALGORITMUS ====================
 
 def optimalizalt_vagas(tabla: Tabla, darab_hossz: int, darab_szelesseg: int, vagasveszteseg: int) -> VagasiEredmeny:
     if darab_szelesseg > tabla.szelesseg:
@@ -204,31 +204,31 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
     
     return eredmenyek
 
-# ==================== WEBES FEL‹LET ====================
+# ==================== WEBES FEL√úLET ====================
 
 st.set_page_config(
-    page_title="Szab·sz Kalkul·tor",
+    page_title="Szab√°sz Kalkul√°tor",
     page_icon="???",
     layout="wide"
 )
 
-st.title("??? Szab·sz Kalkul·tor")
-st.markdown("### TˆbbfÈle t·bla anyagsz¸ksÈglet sz·mÌt·sa")
+st.title("??? Szab√°sz Kalkul√°tor")
+st.markdown("### T√∂bbf√©le t√°bla anyagsz√ºks√©glet sz√°m√≠t√°sa")
 
-# ---------- BE¡LLÕT¡SOK ----------
+# ---------- BE√ÅLL√çT√ÅSOK ----------
 with st.sidebar:
-    st.header("?? Be·llÌt·sok")
+    st.header("?? Be√°ll√≠t√°sok")
     
     vagasveszteseg = st.slider(
-        "?? V·g·svesztesÈg (mm)",
+        "?? V√°g√°svesztes√©g (mm)",
         min_value=1,
         max_value=10,
         value=5,
-        help="A f˚rÈszlap vastags·ga"
+        help="A f≈±r√©szlap vastags√°ga"
     )
     
     st.markdown("---")
-    st.header("?? ElÈrhetı t·bl·k")
+    st.header("?? El√©rhet≈ë t√°bl√°k")
     
     st.markdown("**Compacfoam:**")
     st.code("40x1200x2400\n50x1200x2400\n60x1200x2400\n70x1200x2400\n80x1200x2400")
@@ -236,10 +236,10 @@ with st.sidebar:
     st.markdown("**XPS:**")
     st.code("20x600x1250\n30x600x1250\n40x600x1250\n50x600x1250\n60x600x1250\n80x600x1250")
 
-# ---------- DARABOK KEZEL…SE ----------
+# ---------- DARABOK KEZEL√âSE ----------
 st.header("?? Darabok")
 
-# Munkamenetben t·roljuk a darabokat
+# Munkamenetben t√°roljuk a darabokat
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
         {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 100, "hossz": 2400, "darabszam": 5},
@@ -252,7 +252,7 @@ if "darabok" not in st.session_state:
         {"anyag": "XPS", "vastagsag": 30, "szelesseg": 400, "hossz": 800, "darabszam": 15},
     ]
 
-# Darabok list·z·sa
+# Darabok list√°z√°sa
 col1, col2 = st.columns([2, 1])
 
 with col1:
@@ -264,26 +264,26 @@ with col1:
             data.append({
                 "ID": i,
                 "Anyag": d["anyag"],
-                "Vastags·g": d["vastagsag"],
-                "SzÈlessÈg": d["szelesseg"],
+                "Vastags√°g": d["vastagsag"],
+                "Sz√©less√©g": d["szelesseg"],
                 "Hossz": d["hossz"],
-                "Darabsz·m": d["darabszam"]
+                "Darabsz√°m": d["darabszam"]
             })
         st.dataframe(data, use_container_width=True)
     else:
-        st.info("Nincs egyetlen darab sem! Adj hozz· az al·bbi ˚rlapon.")
+        st.info("Nincs egyetlen darab sem! Adj hozz√° az al√°bbi ≈±rlapon.")
 
 with col2:
-    st.subheader("? ⁄j darab hozz·ad·sa")
+    st.subheader("? √öj darab hozz√°ad√°sa")
     
     with st.form("add_piece"):
         anyag = st.selectbox("Anyag", ["Compacfoam", "XPS"])
-        vastagsag = st.number_input("Vastags·g (mm)", min_value=10, max_value=100, value=40)
-        szelesseg = st.number_input("SzÈlessÈg (mm)", min_value=10, max_value=1000, value=120)
+        vastagsag = st.number_input("Vastags√°g (mm)", min_value=10, max_value=100, value=40)
+        szelesseg = st.number_input("Sz√©less√©g (mm)", min_value=10, max_value=1000, value=120)
         hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2400)
-        darabszam = st.number_input("Darabsz·m", min_value=1, max_value=1000, value=10)
+        darabszam = st.number_input("Darabsz√°m", min_value=1, max_value=1000, value=10)
         
-        submitted = st.form_submit_button("? Hozz·ad")
+        submitted = st.form_submit_button("? Hozz√°ad")
         if submitted:
             st.session_state.darabok.append({
                 "anyag": anyag,
@@ -294,30 +294,30 @@ with col2:
             })
             st.rerun()
 
-# Darab tˆrlÈse
+# Darab t√∂rl√©se
 if st.session_state.darabok:
-    st.subheader("??? Darab tˆrlÈse")
+    st.subheader("??? Darab t√∂rl√©se")
     torlendo = st.selectbox(
-        "V·laszd ki a tˆrlendı darabot",
+        "V√°laszd ki a t√∂rlend≈ë darabot",
         options=range(len(st.session_state.darabok)),
         format_func=lambda i: f"{st.session_state.darabok[i]['anyag']} {st.session_state.darabok[i]['vastagsag']}mm - {st.session_state.darabok[i]['darabszam']} db"
     )
-    if st.button("??? TˆrlÈs"):
+    if st.button("??? T√∂rl√©s"):
         del st.session_state.darabok[torlendo]
         st.rerun()
 
-# ---------- SZ¡MÕT¡S ----------
+# ---------- SZ√ÅM√çT√ÅS ----------
 st.markdown("---")
 
 col1, col2, col3 = st.columns([1, 1, 1])
 with col2:
-    if st.button("?? SZ¡MÕT¡S", type="primary", use_container_width=True):
+    if st.button("?? SZ√ÅM√çT√ÅS", type="primary", use_container_width=True):
         st.session_state.szamitva = True
 
-# ---------- EREDM…NYEK ----------
+# ---------- EREDM√âNYEK ----------
 if st.session_state.get("szamitva", False):
     st.markdown("---")
-    st.header("?? EREDM…NYEK")
+    st.header("?? EREDM√âNYEK")
     
     darabok_lista = []
     for d in st.session_state.darabok:
@@ -341,19 +341,19 @@ if st.session_state.get("szamitva", False):
                     st.metric(
                         label=f"{vastagsag} mm",
                         value=f"{eredmeny.ossz_tabla_db} db",
-                        delta=f"HulladÈk: {eredmeny.hulladek_szazalek:.1f}%"
+                        delta=f"Hullad√©k: {eredmeny.hulladek_szazalek:.1f}%"
                     )
                     
-                    with st.expander("?? RÈszletek"):
-                        st.write(f"**Felhaszn·lt hossz:** {eredmeny.ossz_felhasznalt} mm")
-                        st.write(f"**Teljes t·bla hossz:** {eredmeny.ossz_hossz} mm")
+                    with st.expander("?? R√©szletek"):
+                        st.write(f"**Felhaszn√°lt hossz:** {eredmeny.ossz_felhasznalt} mm")
+                        st.write(f"**Teljes t√°bla hossz:** {eredmeny.ossz_hossz} mm")
                         if eredmeny.darabok:
                             st.write("**Darabok:**")
                             for d in eredmeny.darabok:
                                 st.write(f"- {d.darabszam} db {d.szelesseg}x{d.hossz} mm")
         
         st.markdown("---")
-        st.subheader("?? TELJES ÷SSZESÕT…S")
+        st.subheader("?? TELJES √ñSSZES√çT√âS")
         
         ossz_tabla = 0
         for anyag, vastag_eredmenyek in eredmenyek.items():
@@ -361,10 +361,10 @@ if st.session_state.get("szamitva", False):
             ossz_tabla += anyag_db
             st.metric(f"{anyag.upper()}", f"{anyag_db} db")
         
-        st.metric("??? MIND÷SSZESEN", f"{ossz_tabla} db", delta="T·bl·k sz·ma")
+        st.metric("??? MIND√ñSSZESEN", f"{ossz_tabla} db", delta="T√°bl√°k sz√°ma")
         
     except Exception as e:
-        st.error(f"? Hiba a sz·mÌt·s sor·n: {e}")
+        st.error(f"? Hiba a sz√°m√≠t√°s sor√°n: {e}")
 
 st.markdown("---")
-st.caption("??? Szab·sz Kalkul·tor - TˆbbfÈle t·bla anyagsz¸ksÈglet sz·mÌt·sa")
+st.caption("??? Szab√°sz Kalkul√°tor - T√∂bbf√©le t√°bla anyagsz√ºks√©glet sz√°m√≠t√°sa")

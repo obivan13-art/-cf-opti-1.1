@@ -69,27 +69,26 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
     """
     Egy tablabol vagja ki a darabokat.
     FIGYELEMBE VESZI A VAGASVESZTESEGET!
+    XPS-nel is UGYANUGY szamol, mint CF-nel.
     """
     
     felhasznalt_terulet = 0
     kivagott_darabok = []
-    maradek_szelesseg = tabla.szelesseg
-    maradek_hossz = tabla.hossz
     
     for szelesseg, hossz, darabszam in darabok:
-        if szelesseg > tabla.szelesseg or hossz > tabla.hossz:
+        if szelesseg > tabla.szelesseg:
             continue
         
-        # Hany darab fer egymas melle a szelessegben (vagasveszteseget figyelembe veve)
-        if szelesseg + vagasveszteseg > tabla.szelesseg:
-            db_szelessegben = 1
-        else:
-            db_szelessegben = (tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
+        # Hany darab fer egymas melle a szelessegben
+        db_szelessegben = tabla.szelesseg // szelesseg
         
-        # Hany darab fer a hosszban (vagasveszteseget figyelembe veve)
-        if hossz + vagasveszteseg > tabla.hossz:
-            db_hosszban = 1
+        # Hany darab fer a hosszban (toldas engedelyezve)
+        # Ha a darab hosszabb, mint a tabla, TOLDANI KELL!
+        if hossz > tabla.hossz:
+            # Toldas: hany tabla kell a hosszhoz
+            db_hosszban = math.ceil(hossz / tabla.hossz)
         else:
+            # Normal vagas
             db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
         
         # Osszes darab egy tablabol
@@ -133,7 +132,8 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             if not elerheto_tablak:
                 continue
             
-            legjobb_tabla = max(elerheto_tablak, key=lambda t: t.hossz)
+            # A legnagyobb tablat valasztjuk
+            legjobb_tabla = max(elerheto_tablak, key=lambda t: t.szelesseg * t.hossz)
             
             # Darabok osszegyujtese meretenkent
             meret_csoportok = defaultdict(int)
@@ -146,9 +146,15 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             tablak = []
             
             for (szelesseg, hossz), darabszam in meret_csoportok.items():
-                # Hany darab fer egy tablara (VAGASVESZTESEGGEL)
-                db_szelessegben = (legjobb_tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
-                db_hosszban = (legjobb_tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+                # Hany darab fer egy tablara
+                db_szelessegben = legjobb_tabla.szelesseg // szelesseg
+                
+                # Hany darab fer a hosszban (toldas engedelyezve)
+                if hossz > legjobb_tabla.hossz:
+                    db_hosszban = math.ceil(hossz / legjobb_tabla.hossz)
+                else:
+                    db_hosszban = (legjobb_tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+                
                 db_egy_tablabol = db_szelessegben * db_hosszban
                 
                 if db_egy_tablabol > 0:
@@ -219,7 +225,7 @@ st.header("📋 Darabok")
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
         {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 10},
-        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 1},
+        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 2},
     ]
 
 col1, col2 = st.columns([2, 1])
@@ -250,7 +256,7 @@ with col2:
         vastagsag = st.number_input("Vastagsag (mm)", min_value=10, max_value=100, value=40)
         szelesseg = st.number_input("Szelesseg (mm)", min_value=10, max_value=1000, value=120)
         hossz = st.number_input("Hossz (mm)", min_value=10, max_value=3000, value=2400)
-        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=10)
+        darabszam = st.number_input("Darabszam", min_value=1, max_value=1000, value=2)
         
         submitted = st.form_submit_button("➕ Hozzaad")
         if submitted:

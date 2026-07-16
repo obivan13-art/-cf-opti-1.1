@@ -78,19 +78,20 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
         if szelesseg > tabla.szelesseg:
             continue
         
-        # Hany darab fer egymas melle a szelessegben (vagasveszteseget figyelembe veve)
-        db_szelessegben = tabla.szelesseg // szelesseg
+        # Hany darab fer egymas melle a szelessegben (VAGASVESZTESEGGEL)
+        # Képlet: n * szelesseg + (n-1) * vagasveszteseg <= tabla.szelesseg
+        # n = (tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
+        db_szelessegben = (tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
+        if db_szelessegben == 0:
+            db_szelessegben = 1
         
-        # Hany darab fer a hosszban (toldas esetén is)
+        # Hany darab fer a hosszban (VAGASVESZTESEGGEL)
         if hossz > tabla.hossz:
-            # Toldas: hany darab fer a hosszban (a vágásveszteséget is figyelembe véve)
-            # Képlet: n * darab_hossz + (n-1) * vagasveszteseg <= tabla.hossz * db_hosszban
-            # Egyszerűsítve: minden darabhoz +vagasveszteseg kell, kivéve az utolsót
+            # Toldas: hany db fer a hosszban
             db_hosszban = math.ceil((hossz + vagasveszteseg) / (tabla.hossz + vagasveszteseg))
             if db_hosszban == 0:
                 db_hosszban = 1
         else:
-            # Normal vagas
             db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
             if db_hosszban == 0:
                 db_hosszban = 1
@@ -105,10 +106,12 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
     
     teljes_terulet = tabla.szelesseg * tabla.hossz
     hulladek_terulet = teljes_terulet - felhasznalt_terulet
-    hulladek_szazalek = (hulladek_terulet / teljes_terulet) * 100.0 if teljes_terulet > 0 else 0.0
     
-    # Ha negatív a hulladék, állítsuk 0-ra (hiba esetén)
-    if hulladek_szazalek < 0:
+    if teljes_terulet > 0:
+        hulladek_szazalek = (hulladek_terulet / teljes_terulet) * 100.0
+        if hulladek_szazalek < 0:
+            hulladek_szazalek = 0.0
+    else:
         hulladek_szazalek = 0.0
     
     return VagasiTerv(
@@ -156,7 +159,9 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             
             for (szelesseg, hossz), darabszam in meret_csoportok.items():
                 # Hany darab fer egy tablara (VAGASVESZTESEGGEL)
-                db_szelessegben = legjobb_tabla.szelesseg // szelesseg
+                db_szelessegben = (legjobb_tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
+                if db_szelessegben == 0:
+                    db_szelessegben = 1
                 
                 # Toldas kezelese
                 if hossz > legjobb_tabla.hossz:
@@ -189,8 +194,11 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
                     
                     ossz_tabla_db += szukseges_tabla_db
             
-            hulladek_szazalek = ((ossz_terulet - ossz_felhasznalt) / ossz_terulet * 100) if ossz_terulet > 0 else 0
-            if hulladek_szazalek < 0:
+            if ossz_terulet > 0:
+                hulladek_szazalek = ((ossz_terulet - ossz_felhasznalt) / ossz_terulet) * 100
+                if hulladek_szazalek < 0:
+                    hulladek_szazalek = 0
+            else:
                 hulladek_szazalek = 0
             
             eredmenyek[anyag][vastagsag] = SzuksegletEredmeny(
@@ -221,7 +229,7 @@ with st.sidebar:
         "🔪 Vagasveszteseg (mm)",
         min_value=1,
         max_value=10,
-        value=5,
+        value=4,
         help="A fureszlap vastagsaga"
     )
     
@@ -240,8 +248,7 @@ st.header("📋 Darabok")
 if "darabok" not in st.session_state:
     st.session_state.darabok = [
         {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 10},
-        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 2},
-        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 3},
+        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 12},
     ]
 
 col1, col2 = st.columns([2, 1])

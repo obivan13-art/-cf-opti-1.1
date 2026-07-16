@@ -69,7 +69,6 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
     """
     Egy tablabol vagja ki a darabokat.
     FIGYELEMBE VESZI A VAGASVESZTESEGET!
-    XPS-nel is UGYANUGY szamol, mint CF-nel.
     """
     
     felhasznalt_terulet = 0
@@ -79,17 +78,22 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
         if szelesseg > tabla.szelesseg:
             continue
         
-        # Hany darab fer egymas melle a szelessegben
+        # Hany darab fer egymas melle a szelessegben (vagasveszteseget figyelembe veve)
         db_szelessegben = tabla.szelesseg // szelesseg
         
-        # Hany darab fer a hosszban (toldas engedelyezve)
-        # Ha a darab hosszabb, mint a tabla, TOLDANI KELL!
+        # Hany darab fer a hosszban (toldas esetén is)
         if hossz > tabla.hossz:
-            # Toldas: hany tabla kell a hosszhoz
-            db_hosszban = math.ceil(hossz / tabla.hossz)
+            # Toldas: hany darab fer a hosszban (a vágásveszteséget is figyelembe véve)
+            # Képlet: n * darab_hossz + (n-1) * vagasveszteseg <= tabla.hossz * db_hosszban
+            # Egyszerűsítve: minden darabhoz +vagasveszteseg kell, kivéve az utolsót
+            db_hosszban = math.ceil((hossz + vagasveszteseg) / (tabla.hossz + vagasveszteseg))
+            if db_hosszban == 0:
+                db_hosszban = 1
         else:
             # Normal vagas
             db_hosszban = (tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+            if db_hosszban == 0:
+                db_hosszban = 1
         
         # Osszes darab egy tablabol
         db_egy_tablabol = db_szelessegben * db_hosszban
@@ -101,19 +105,24 @@ def optimalizalt_vagas(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasv
     
     teljes_terulet = tabla.szelesseg * tabla.hossz
     hulladek_terulet = teljes_terulet - felhasznalt_terulet
-    hulladek_szazalek = (hulladek_terulet / teljes_terulet) * 100.0 if teljes_terulet > 0 else 100.0
+    hulladek_szazalek = (hulladek_terulet / teljes_terulet) * 100.0 if teljes_terulet > 0 else 0.0
+    
+    # Ha negatív a hulladék, állítsuk 0-ra (hiba esetén)
+    if hulladek_szazalek < 0:
+        hulladek_szazalek = 0.0
     
     return VagasiTerv(
         tabla=tabla,
         darabok=kivagott_darabok,
         felhasznalt_terulet=felhasznalt_terulet,
-        hulladek_terulet=hulladek_terulet,
+        hulladek_terulet=max(0, hulladek_terulet),
         hulladek_szazalek=hulladek_szazalek
     )
 
 def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> Dict[str, Dict[int, SzuksegletEredmeny]]:
     """Kiszamolja a szukseges tablakat anyagonkent es vastagsagonkent."""
     
+    # Csoportositas anyag es vastagsag szerint
     csoportok = defaultdict(lambda: defaultdict(list))
     for d in darabok:
         csoportok[d.anyag][d.vastagsag].append(d)
@@ -135,7 +144,7 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             # A legnagyobb tablat valasztjuk
             legjobb_tabla = max(elerheto_tablak, key=lambda t: t.szelesseg * t.hossz)
             
-            # Darabok osszegyujtese meretenkent
+            # Darabok osszegyujtese meretenkent (OSSZEVONJUK AZ AZONOSAKAT!)
             meret_csoportok = defaultdict(int)
             for d in darab_lista:
                 meret_csoportok[(d.szelesseg, d.hossz)] += d.darabszam
@@ -146,14 +155,18 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             tablak = []
             
             for (szelesseg, hossz), darabszam in meret_csoportok.items():
-                # Hany darab fer egy tablara
+                # Hany darab fer egy tablara (VAGASVESZTESEGGEL)
                 db_szelessegben = legjobb_tabla.szelesseg // szelesseg
                 
-                # Hany darab fer a hosszban (toldas engedelyezve)
+                # Toldas kezelese
                 if hossz > legjobb_tabla.hossz:
-                    db_hosszban = math.ceil(hossz / legjobb_tabla.hossz)
+                    db_hosszban = math.ceil((hossz + vagasveszteseg) / (legjobb_tabla.hossz + vagasveszteseg))
+                    if db_hosszban == 0:
+                        db_hosszban = 1
                 else:
                     db_hosszban = (legjobb_tabla.hossz + vagasveszteseg) // (hossz + vagasveszteseg)
+                    if db_hosszban == 0:
+                        db_hosszban = 1
                 
                 db_egy_tablabol = db_szelessegben * db_hosszban
                 
@@ -177,6 +190,8 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
                     ossz_tabla_db += szukseges_tabla_db
             
             hulladek_szazalek = ((ossz_terulet - ossz_felhasznalt) / ossz_terulet * 100) if ossz_terulet > 0 else 0
+            if hulladek_szazalek < 0:
+                hulladek_szazalek = 0
             
             eredmenyek[anyag][vastagsag] = SzuksegletEredmeny(
                 anyag=anyag,
@@ -226,6 +241,7 @@ if "darabok" not in st.session_state:
     st.session_state.darabok = [
         {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 10},
         {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 2},
+        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 120, "hossz": 2400, "darabszam": 3},
     ]
 
 col1, col2 = st.columns([2, 1])

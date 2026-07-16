@@ -26,8 +26,8 @@ class DarabPozicio:
     """Egy darab pozíciója a táblán"""
     szelesseg: int
     hossz: int
-    x: int  # bal alsó sarok x koordináta
-    y: int  # bal alsó sarok y koordináta
+    x: int
+    y: int
     darabszam: int
 
 @dataclass
@@ -57,6 +57,7 @@ class SzuksegletEredmeny:
 def tablak_eloallitasa() -> List[Tabla]:
     tablak = []
     
+    # COMPACFOAM - NINCS TOLDÁS!
     compacfoam_meretek = [
         (40, 1200, 2400), (50, 1200, 2400), (60, 1200, 2400),
         (70, 1200, 2400), (80, 1200, 2400),
@@ -65,6 +66,7 @@ def tablak_eloallitasa() -> List[Tabla]:
     for vastag, szel, hossz in compacfoam_meretek:
         tablak.append(Tabla("Compacfoam", vastag, szel, hossz))
     
+    # XPS - TOLDÁS LEHETSÉGES!
     xps_meretek = [
         (20, 600, 1250), (30, 600, 1250), (40, 600, 1250),
         (50, 600, 1250), (60, 600, 1250), (80, 600, 1250),
@@ -78,18 +80,76 @@ def tablak_eloallitasa() -> List[Tabla]:
 # ==================== TÁBLA KIVÁLASZTÁS ====================
 
 def tabla_kivalasztasa(anyag: str, vastagsag: int, osszes_tabla: List[Tabla]) -> Optional[Tabla]:
-    """Kiválasztja a legnagyobb elérhető táblát az adott anyagból és vastagságból."""
+    """Kiválasztja a legnagyobb elérhető táblát."""
     elerheto = [t for t in osszes_tabla if t.anyag == anyag and t.vastagsag == vastagsag]
     if not elerheto:
         return None
     return max(elerheto, key=lambda t: t.szelesseg * t.hossz)
 
+# ==================== TOLDÁS KEZELÉSE ====================
+
+def toldas_kezelese(anyag: str, darab_hossz: int, tabla_hossz: int, vagasveszteseg: int) -> int:
+    """
+    Kiszámolja, hogy hány tábla kell a darab hosszának eléréséhez.
+    COMPACFOAM: NINCS TOLDÁS (max 2400)
+    XPS: TOLDÁS LEHETSÉGES (1250-nél hosszabb)
+    """
+    if anyag == "Compacfoam":
+        # Compacfoam: nincs toldás, a darab max 2400
+        return 1
+    
+    # XPS: toldás kezelése
+    if darab_hossz <= tabla_hossz:
+        return 1
+    
+    # Hány darab kell a hosszhoz (toldás)
+    db = math.ceil((darab_hossz + vagasveszteseg) / (tabla_hossz + vagasveszteseg))
+    return db
+
+# ==================== DARABOK SZÁMOLÁSA EGY TÁBLÁBÓL ====================
+
+def darabok_szama_egy_tablabol(
+    anyag: str,
+    tabla: Tabla,
+    darab_szelesseg: int,
+    darab_hossz: int,
+    vagasveszteseg: int
+) -> int:
+    """
+    Kiszámolja, hogy egy táblából hány darab vágható ki.
+    COMPACFOAM: NINCS TOLDÁS
+    XPS: TOLDÁS LEHETSÉGES
+    """
+    if darab_szelesseg > tabla.szelesseg:
+        return 0
+    
+    # Hány darab fér a szélességben (vágásveszteséggel)
+    db_szelesseg = (tabla.szelesseg + vagasveszteseg) // (darab_szelesseg + vagasveszteseg)
+    if db_szelesseg == 0:
+        db_szelesseg = 1
+    
+    # Hány darab fér a hosszban
+    if anyag == "Compacfoam":
+        # Compacfoam: nincs toldás, egy sorban max 1 darab hosszban
+        db_hossz = 1
+    else:
+        # XPS: toldás kezelése
+        db_hossz = toldas_kezelese(anyag, darab_hossz, tabla.hossz, vagasveszteseg)
+    
+    return db_szelesseg * db_hossz
+
 # ==================== DARABOK KIHELYEZÉSE ====================
 
-def darabok_kihelyezese(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagasveszteseg: int) -> VagasiTerv:
+def darabok_kihelyezese(
+    anyag: str,
+    tabla: Tabla,
+    darabok: List[Tuple[int, int, int]],
+    vagasveszteseg: int
+) -> VagasiTerv:
     """
     Kihelyezi a darabokat a táblára (forgatás nélkül).
-    Visszaadja a vágási tervet koordinátákkal.
+    COMPACFOAM: NINCS TOLDÁS
+    XPS: TOLDÁS LEHETSÉGES
     """
     poziciok = []
     akt_x = 0
@@ -104,6 +164,9 @@ def darabok_kihelyezese(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagas
         if szelesseg > tabla.szelesseg:
             continue
         
+        # Toldás kezelése anyagfüggően
+        db_toldas = toldas_kezelese(anyag, hossz, tabla.hossz, vagasveszteseg)
+        
         for _ in range(darabszam):
             # Ellenőrizzük, hogy befér-e az aktuális sorba
             if akt_x + szelesseg > tabla.szelesseg:
@@ -113,10 +176,16 @@ def darabok_kihelyezese(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagas
                 max_y_this_row = 0
             
             # Ellenőrizzük, hogy befér-e a táblába
-            if akt_y + hossz > tabla.hossz:
-                # Itt a darab nem fér a táblába
-                # Ezt a darabot új táblára kell tenni
-                continue
+            if anyag == "Compacfoam":
+                # Compacfoam: max 2400 a hossz, egy darab fér
+                if akt_y + hossz > tabla.hossz:
+                    continue
+                darab_effektiv_hossz = hossz
+            else:
+                # XPS: toldás
+                if akt_y + (hossz if hossz <= tabla.hossz else tabla.hossz) > tabla.hossz:
+                    continue
+                darab_effektiv_hossz = hossz if hossz <= tabla.hossz else tabla.hossz
             
             poziciok.append(DarabPozicio(
                 szelesseg=szelesseg,
@@ -128,65 +197,51 @@ def darabok_kihelyezese(tabla: Tabla, darabok: List[Tuple[int, int, int]], vagas
             
             felhasznalt_terulet += szelesseg * hossz
             akt_x += szelesseg + vagasveszteseg
-            max_y_this_row = max(max_y_this_row, hossz)
+            max_y_this_row = max(max_y_this_row, darab_effektiv_hossz)
     
     teljes_terulet = tabla.szelesseg * tabla.hossz
     hulladek_terulet = teljes_terulet - felhasznalt_terulet
     kihasznaltsag = (felhasznalt_terulet / teljes_terulet) * 100 if teljes_terulet > 0 else 0
     hulladek_szazalek = 100 - kihasznaltsag
     
+    if kihasznaltsag < 0:
+        kihasznaltsag = 0
+    if hulladek_szazalek < 0:
+        hulladek_szazalek = 0
+    
     return VagasiTerv(
         tabla=tabla,
         darabok=poziciok,
         felhasznalt_terulet=felhasznalt_terulet,
-        hulladek_terulet=hulladek_terulet,
+        hulladek_terulet=hulladek_terulet if hulladek_terulet > 0 else 0,
         kihasznaltsag=kihasznaltsag,
         hulladek_szazalek=hulladek_szazalek
     )
 
-# ==================== TOLDÁS KEZELÉSE ====================
-
-def toldas_kezelese(darab_hossz: int, tabla_hossz: int, vagasveszteseg: int) -> int:
-    """
-    Kiszámolja, hogy hány tábla kell a darab hosszának eléréséhez.
-    """
-    if darab_hossz <= tabla_hossz:
-        return 1
-    
-    # Hány darab kell a hosszhoz
-    db = math.ceil((darab_hossz + vagasveszteseg) / (tabla_hossz + vagasveszteseg))
-    return db
-
 # ==================== DARABOK KIOSZTÁSA ====================
 
 def darabok_kiosztasa(
+    anyag: str,
     meret_csoportok: Dict[Tuple[int, int], int],
     legjobb_tabla: Tabla,
     vagasveszteseg: int
 ) -> Tuple[List[VagasiTerv], int, int]:
     """
     Kiosztja a darabokat a táblákra.
-    Visszaadja: (tablak_listaja, ossz_felhasznalt, ossz_terulet)
     """
     tablak = []
     ossz_felhasznalt = 0
     ossz_terulet = 0
     tabla_terulet = legjobb_tabla.szelesseg * legjobb_tabla.hossz
     
-    # Minden méretcsoportra külön számolunk
     for (szelesseg, hossz), darabszam in meret_csoportok.items():
-        # Toldás kezelése
-        db_toldas = toldas_kezelese(hossz, legjobb_tabla.hossz, vagasveszteseg)
-        
-        # Hány darab fér egy táblára (szélességben)
-        db_szelesseg = (legjobb_tabla.szelesseg + vagasveszteseg) // (szelesseg + vagasveszteseg)
-        if db_szelesseg == 0:
-            db_szelesseg = 1
-        
-        # Egy táblából hány darab jön ki
-        db_egy_tablabol = db_szelesseg * db_toldas
+        # Hány darab fér egy táblára
+        db_egy_tablabol = darabok_szama_egy_tablabol(
+            anyag, legjobb_tabla, szelesseg, hossz, vagasveszteseg
+        )
         
         if db_egy_tablabol > 0:
+            # Hány tábla kell
             szukseges_tabla_db = math.ceil(darabszam / db_egy_tablabol)
             
             maradek = darabszam
@@ -194,10 +249,11 @@ def darabok_kiosztasa(
                 akt_db = min(maradek, db_egy_tablabol)
                 maradek -= akt_db
                 
-                # Darabok listája a kihelyezéshez
                 darabok_lista = [(szelesseg, hossz, akt_db)]
                 
-                terv = darabok_kihelyezese(legjobb_tabla, darabok_lista, vagasveszteseg)
+                terv = darabok_kihelyezese(
+                    anyag, legjobb_tabla, darabok_lista, vagasveszteseg
+                )
                 tablak.append(terv)
                 ossz_felhasznalt += terv.felhasznalt_terulet
                 ossz_terulet += tabla_terulet
@@ -212,7 +268,6 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
     # 1. CSOPORTOSÍTÁS
     csoportok = defaultdict(lambda: defaultdict(list))
     for d in darabok:
-        # Hibakezelés
         if d.szelesseg <= 0:
             st.warning(f"⚠️ Figyelem: {d.anyag} {d.vastagsag}mm - szélesség 0 vagy negatív!")
             continue
@@ -242,7 +297,7 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             
             # 4. DARABOK KIOSZTÁSA
             tablak, ossz_felhasznalt, ossz_terulet = darabok_kiosztasa(
-                meret_csoportok, legjobb_tabla, vagasveszteseg
+                anyag, meret_csoportok, legjobb_tabla, vagasveszteseg
             )
             
             # 5. HULLADÉK SZÁMÍTÁSA
@@ -260,7 +315,6 @@ def anyagszukseglet_szamitas(darabok: List[KeszDarab], vagasveszteseg: int) -> D
             # 6. EREDMÉNY ÖSSZEÁLLÍTÁSA
             ossz_tabla_db = len(tablak)
             
-            # Frissítjük a táblák hulladékát
             for terv in tablak:
                 if terv.felhasznalt_terulet > 0:
                     terv.kihasznaltsag = (terv.felhasznalt_terulet / (terv.tabla.szelesseg * terv.tabla.hossz)) * 100
@@ -317,6 +371,7 @@ if "darabok" not in st.session_state:
     st.session_state.darabok = [
         {"anyag": "Compacfoam", "vastagsag": 40, "szelesseg": 120, "hossz": 2400, "darabszam": 10},
         {"anyag": "XPS", "vastagsag": 20, "szelesseg": 200, "hossz": 2400, "darabszam": 2},
+        {"anyag": "XPS", "vastagsag": 20, "szelesseg": 200, "hossz": 2400, "darabszam": 10},
     ]
 
 col1, col2 = st.columns([2, 1])
